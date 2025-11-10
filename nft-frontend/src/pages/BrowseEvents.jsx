@@ -114,54 +114,78 @@ export default function BrowseEvents() {
 
       // Get event details for metadata
       const event = events.find(e => e.id === eventId);
-      const tempTokenId = Date.now(); // Temporary ID for metadata creation
 
-      let tokenURI = '';
-      let qrCodeDataURL = '';
+      // For QR code, we'll use event info since we don't know the token ID yet
+      // The actual token ID will be assigned by the contract after minting
+      let tokenURI = `https://api.eventtickets.app/ticket/${eventId}-${Date.now()}`; // Default fallback
 
-      // Check if IPFS is configured
-      if (isPinataConfigured()) {
-        console.log('📦 IPFS configured, generating QR code and uploading metadata...');
+      // Try IPFS integration (non-blocking)
+      // Note: QR code will contain event info, not token ID (since we don't have it yet)
+      try {
+        // Check if IPFS is configured
+        if (isPinataConfigured()) {
+          console.log('📦 IPFS configured, attempting to generate QR code and upload metadata...');
 
-        // Generate QR code for the ticket
-        try {
-          qrCodeDataURL = await generateTicketQRCode({
-            tokenId: tempTokenId,
+          let qrCodeDataURL = '';
+
+          // Generate QR code with event info (we'll update with token ID later if needed)
+          try {
+            // Use a simple QR format with just event ID and owner
+            // This way it can still be used for verification
+            const qrPromise = generateTicketQRCode({
+              tokenId: `E${eventId}`, // Use event ID prefix temporarily
+              eventId: eventId,
+              owner: address
+            });
+
+            // Timeout after 5 seconds
+            qrCodeDataURL = await Promise.race([
+              qrPromise,
+              new Promise((_, reject) => setTimeout(() => reject(new Error('QR generation timeout')), 5000))
+            ]);
+
+            console.log('✅ QR code generated with event info');
+          } catch (qrError) {
+            console.warn('⚠️ QR code generation failed, continuing without QR:', qrError.message);
+          }
+
+          // Create metadata
+          const metadata = createTicketMetadata({
+            tokenId: `Event ${eventId} Ticket`, // Descriptive name instead of ID
             eventId: eventId,
-            owner: address
+            eventName: event?.name || 'Event',
+            eventDate: event?.eventDate || 'TBA',
+            seatNumber: event?.soldTickets + 1 || 1,
+            price: price,
+            owner: address,
+            qrCodeDataURL: qrCodeDataURL
           });
-          console.log('✅ QR code generated');
-        } catch (qrError) {
-          console.warn('⚠️ QR code generation failed, continuing without QR:', qrError);
+
+          console.log('📝 Metadata created:', metadata);
+
+          // Upload to IPFS (with timeout)
+          try {
+            const uploadPromise = uploadMetadataToIPFS(metadata);
+
+            // Timeout after 10 seconds
+            const ipfsHash = await Promise.race([
+              uploadPromise,
+              new Promise((_, reject) => setTimeout(() => reject(new Error('IPFS upload timeout')), 10000))
+            ]);
+
+            tokenURI = `ipfs://${ipfsHash}`;
+            console.log('✅ Metadata uploaded to IPFS:', tokenURI);
+            console.log('🌐 View at:', getIPFSGatewayURL(ipfsHash));
+          } catch (ipfsError) {
+            console.warn('⚠️ IPFS upload failed, using fallback URI:', ipfsError.message);
+            // tokenURI already set to fallback
+          }
+        } else {
+          console.log('ℹ️ IPFS not configured, using simple token URI');
         }
-
-        // Create metadata
-        const metadata = createTicketMetadata({
-          tokenId: tempTokenId,
-          eventId: eventId,
-          eventName: event?.name || 'Event',
-          eventDate: event?.eventDate || 'TBA',
-          seatNumber: event?.soldTickets + 1 || 1,
-          price: price,
-          owner: address,
-          qrCodeDataURL: qrCodeDataURL
-        });
-
-        console.log('📝 Metadata created:', metadata);
-
-        // Upload to IPFS
-        try {
-          const ipfsHash = await uploadMetadataToIPFS(metadata);
-          tokenURI = `ipfs://${ipfsHash}`;
-          console.log('✅ Metadata uploaded to IPFS:', tokenURI);
-          console.log('🌐 View at:', getIPFSGatewayURL(ipfsHash));
-        } catch (ipfsError) {
-          console.warn('⚠️ IPFS upload failed, using fallback URI:', ipfsError);
-          tokenURI = `https://api.eventtickets.app/ticket/${eventId}-${Date.now()}`;
-        }
-      } else {
-        console.log('ℹ️ IPFS not configured, using simple token URI');
-        tokenURI = `https://api.eventtickets.app/ticket/${eventId}-${Date.now()}`;
+      } catch (overallError) {
+        console.error('⚠️ IPFS integration error, using fallback URI:', overallError.message);
+        // tokenURI already set to fallback
       }
 
       console.log('🔗 Token URI:', tokenURI);
@@ -199,8 +223,8 @@ export default function BrowseEvents() {
         }
 
         const successMessage = isPinataConfigured()
-          ? `🎉 Ticket purchased successfully!\n\n🎫 Token ID: ${tokenId}\n📄 Transaction: ${tx.hash}\n📦 Metadata stored on IPFS\n\n✅ Your NFT ticket has been created with QR code\n📱 Check your MetaMask wallet (NFTs section)\n\nNote: It may take a few minutes to appear in your wallet.`
-          : `🎉 Ticket purchased successfully!\n\n🎫 Token ID: ${tokenId}\n📄 Transaction: ${tx.hash}\n\n✅ Your NFT ticket has been created\n📱 Check your MetaMask wallet (NFTs section)\n\nNote: It may take a few minutes to appear in your wallet.`;
+          ? `🎉 Ticket purchased successfully!\n\n🎫 Token ID: ${tokenId}\n📄 Transaction: ${tx.hash}\n📦 Metadata stored on IPFS with QR code\n\n✅ Your NFT ticket has been created\n📱 Check your MetaMask wallet (NFTs section)\n\n📷 Scan the QR code for instant verification!\nThe scanner will automatically find your ticket.\n\n⏱️ It may take a few minutes to appear in your wallet.`
+          : `🎉 Ticket purchased successfully!\n\n🎫 Token ID: ${tokenId}\n📄 Transaction: ${tx.hash}\n\n✅ Your NFT ticket has been created\n📱 Check your MetaMask wallet (NFTs section)\n\n📝 Save Token ID: ${tokenId}\n\n⏱️ It may take a few minutes to appear in your wallet.`;
 
         alert(successMessage);
 

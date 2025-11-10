@@ -86,23 +86,75 @@ const VerifyTickets = () => {
       setScanError('');
       setIsScanning(true);
 
+      // First, explicitly request camera permission (helps with Brave)
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+        // Stop the test stream
+        stream.getTracks().forEach(track => track.stop());
+        console.log('✅ Camera permission granted');
+      } catch (permErr) {
+        console.error('Camera permission denied:', permErr);
+        throw new Error('Camera access denied. Please allow camera access in your browser settings.');
+      }
+
       const html5QrCode = new Html5Qrcode("qr-reader");
       html5QrCodeRef.current = html5QrCode;
 
       const config = {
         fps: 10,
-        qrbox: { width: 250, height: 250 }
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        // Additional config for better Brave compatibility
+        disableFlip: false,
+        videoConstraints: {
+          facingMode: "environment",
+          advanced: [{ zoom: 1.0 }]
+        }
       };
 
-      await html5QrCode.start(
-        { facingMode: "environment" },
-        config,
-        onScanSuccess,
-        onScanError
-      );
+      // Try with different camera configurations
+      try {
+        // Try with specific camera constraints first (works better in Brave)
+        await html5QrCode.start(
+          {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          config,
+          onScanSuccess,
+          onScanError
+        );
+      } catch (startErr) {
+        console.warn('Failed with environment camera, trying any camera:', startErr);
+        // Fallback: try with any available camera
+        await html5QrCode.start(
+          { facingMode: "user" }, // Front camera fallback
+          config,
+          onScanSuccess,
+          onScanError
+        );
+      }
     } catch (err) {
       console.error('Failed to start scanner:', err);
-      setScanError('Failed to start camera. Please ensure camera permissions are granted.');
+
+      let errorMsg = 'Failed to start camera. ';
+
+      if (err.message?.includes('denied')) {
+        errorMsg += 'Camera access was denied. Please click the shield icon (🦁) in the address bar and allow camera access.';
+      } else if (err.message?.includes('NotFoundError')) {
+        errorMsg += 'No camera found. Please ensure your device has a camera.';
+      } else if (err.message?.includes('NotAllowedError')) {
+        errorMsg += 'Camera permission denied. For Brave: Click the shield icon → Allow camera.';
+      } else if (err.message?.includes('NotReadableError')) {
+        errorMsg += 'Camera is already in use by another application. Please close other apps using the camera.';
+      } else {
+        errorMsg += err.message || 'Please ensure camera permissions are granted.';
+      }
+
+      setScanError(errorMsg);
       setIsScanning(false);
     }
   };
@@ -120,16 +172,79 @@ const VerifyTickets = () => {
     setIsScanning(false);
   };
 
+  // Find token ID by event ID and owner address
+  const findTokenByEventAndOwner = async (eventId, ownerAddress) => {
+    try {
+      console.log(`🔍 Searching for ticket: Event ${eventId}, Owner ${ownerAddress}`);
+
+      const provider = new ethers.JsonRpcProvider('https://rpc-amoy.polygon.technology');
+      const contract = new ethers.Contract(contractAddress, contractABI, provider);
+
+      // Search through recent token IDs (last 100 tokens)
+      // In production, you'd want to emit events and use event logs
+      for (let tokenId = 1; tokenId <= 100; tokenId++) {
+        try {
+          const owner = await contract.ownerOf(tokenId);
+
+          if (owner.toLowerCase() === ownerAddress.toLowerCase()) {
+            const ticket = await contract.tickets(tokenId);
+
+            if (Number(ticket.eventId) === Number(eventId)) {
+              console.log(`✅ Found ticket! Token ID: ${tokenId}`);
+              return tokenId;
+            }
+          }
+        } catch (err) {
+          // Token doesn't exist or error, continue searching
+          continue;
+        }
+      }
+
+      console.log('❌ Ticket not found');
+      return null;
+    } catch (error) {
+      console.error('Error searching for ticket:', error);
+      return null;
+    }
+  };
+
   // Handle successful QR scan
   const onScanSuccess = async (decodedText, decodedResult) => {
     console.log('QR Code scanned:', decodedText);
 
     // Stop scanner
     await stopQRScanner();
+    setIsLoading(true);
 
     try {
       // Try to parse as JSON (our custom format)
       const qrData = parseQRCodeData(decodedText);
+
+      // Check if tokenId starts with 'E' (event-based QR code)
+      if (qrData.tokenId.toString().startsWith('E')) {
+        console.log('Event-based QR code detected, searching for token...');
+
+        // Show searching message
+        alert('🔍 Searching for your ticket...\n\nThis may take a few seconds.');
+
+        // Find the actual token ID using event ID and owner
+        const foundTokenId = await findTokenByEventAndOwner(qrData.eventId, qrData.owner);
+
+        if (foundTokenId) {
+          setTokenId(foundTokenId.toString());
+
+          // Auto-verify the ticket
+          setTimeout(() => {
+            verifyTicket({ preventDefault: () => {} });
+          }, 500);
+        } else {
+          alert(`❌ Ticket not found!\n\nEvent ID: ${qrData.eventId}\nOwner: ${qrData.owner.slice(0, 10)}...\n\nPossible reasons:\n• Ticket hasn't been minted yet\n• Wrong wallet connected\n• Ticket was transferred to another address`);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // If tokenId is a number, use it directly
       setTokenId(qrData.tokenId.toString());
 
       // Auto-verify the ticket
@@ -138,13 +253,27 @@ const VerifyTickets = () => {
       }, 500);
 
     } catch (parseError) {
-      // If parsing fails, assume it's just a token ID
-      console.log('Using raw QR data as token ID');
-      setTokenId(decodedText);
+      // If parsing fails, check if it's a simple token ID number
+      console.log('Parsing QR data failed, checking format:', decodedText);
 
-      setTimeout(() => {
-        verifyTicket({ preventDefault: () => {} });
-      }, 500);
+      // Check if it starts with 'E' (event format)
+      if (decodedText.toString().startsWith('E')) {
+        alert(`⚠️ Could not parse QR code data.\n\nPlease enter your Token ID manually.`);
+        setIsLoading(false);
+        return;
+      }
+
+      // Try to extract just numbers
+      const numericMatch = decodedText.match(/\d+/);
+      if (numericMatch) {
+        setTokenId(numericMatch[0]);
+        setTimeout(() => {
+          verifyTicket({ preventDefault: () => {} });
+        }, 500);
+      } else {
+        alert(`⚠️ Could not parse QR code.\n\nPlease enter Token ID manually.`);
+        setIsLoading(false);
+      }
     }
   };
 
@@ -174,6 +303,30 @@ const VerifyTickets = () => {
       </div>
 
       <div className="verify-container">
+        {/* QR Scanner Info Card */}
+        <div style={{
+          background: 'rgba(99, 102, 241, 0.1)',
+          border: '1px solid rgba(99, 102, 241, 0.3)',
+          padding: '15px',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          color: '#818cf8'
+        }}>
+          <strong>📷 How QR Code Scanning Works:</strong>
+          <p style={{ marginTop: '10px', fontSize: '14px', lineHeight: '1.6' }}>
+            Scan the QR code from your NFT ticket in MetaMask. The system will automatically
+            search for your ticket using the event and owner information, then verify it instantly!
+          </p>
+          <hr style={{ margin: '15px 0', border: 'none', borderTop: '1px solid rgba(99, 102, 241, 0.2)' }} />
+          <strong>🦁 For Brave Browser:</strong>
+          <ol style={{ marginTop: '10px', marginLeft: '20px', fontSize: '13px', lineHeight: '1.5' }}>
+            <li>Click the <strong>shield icon (🦁)</strong> in the address bar</li>
+            <li>Make sure <strong>Camera</strong> permission is ON</li>
+            <li>Click <strong>"Reset permission"</strong> if needed</li>
+            <li>Refresh page and try again</li>
+          </ol>
+        </div>
+
         <form onSubmit={verifyTicket} className="verify-form">
           <div className="form-group">
             <label>Enter Token ID or Scan QR Code</label>
