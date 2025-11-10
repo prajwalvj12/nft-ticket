@@ -1,17 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
+import { Html5Qrcode } from 'html5-qrcode';
 import contractABI from '../EventTicketNFT-abi.json';
 import contractAddress from '../EventTicketNFT-address.js';
+import { parseQRCodeData } from '../utils/qrcode.js';
 import '../styles/Pages.css';
 
 const VerifyTickets = () => {
   const { address, isConnected } = useAccount();
-  
+
   const [tokenId, setTokenId] = useState('');
   const [verificationResult, setVerificationResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState('');
+  const scannerRef = useRef(null);
+  const html5QrCodeRef = useRef(null);
 
   const verifyTicket = async (e) => {
     e.preventDefault();
@@ -64,7 +70,7 @@ const VerifyTickets = () => {
 
       const tx = await contract.useTicket(tokenId);
       await tx.wait();
-      
+
       alert('Ticket marked as used successfully!');
       // Re-verify to update status
       verifyTicket({ preventDefault: () => {} });
@@ -73,6 +79,91 @@ const VerifyTickets = () => {
       alert('Error marking ticket as used: ' + error.message);
     }
   };
+
+  // Start QR code scanning
+  const startQRScanner = async () => {
+    try {
+      setScanError('');
+      setIsScanning(true);
+
+      const html5QrCode = new Html5Qrcode("qr-reader");
+      html5QrCodeRef.current = html5QrCode;
+
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 }
+      };
+
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        onScanSuccess,
+        onScanError
+      );
+    } catch (err) {
+      console.error('Failed to start scanner:', err);
+      setScanError('Failed to start camera. Please ensure camera permissions are granted.');
+      setIsScanning(false);
+    }
+  };
+
+  // Stop QR code scanning
+  const stopQRScanner = async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+        html5QrCodeRef.current.clear();
+      } catch (err) {
+        console.error('Error stopping scanner:', err);
+      }
+    }
+    setIsScanning(false);
+  };
+
+  // Handle successful QR scan
+  const onScanSuccess = async (decodedText, decodedResult) => {
+    console.log('QR Code scanned:', decodedText);
+
+    // Stop scanner
+    await stopQRScanner();
+
+    try {
+      // Try to parse as JSON (our custom format)
+      const qrData = parseQRCodeData(decodedText);
+      setTokenId(qrData.tokenId.toString());
+
+      // Auto-verify the ticket
+      setTimeout(() => {
+        verifyTicket({ preventDefault: () => {} });
+      }, 500);
+
+    } catch (parseError) {
+      // If parsing fails, assume it's just a token ID
+      console.log('Using raw QR data as token ID');
+      setTokenId(decodedText);
+
+      setTimeout(() => {
+        verifyTicket({ preventDefault: () => {} });
+      }, 500);
+    }
+  };
+
+  // Handle scan errors
+  const onScanError = (errorMessage) => {
+    // Ignore continuous scan errors (they're normal)
+    if (!errorMessage.includes('NotFoundException')) {
+      console.warn('QR scan error:', errorMessage);
+    }
+  };
+
+  // Cleanup scanner on unmount
+  useEffect(() => {
+    return () => {
+      if (html5QrCodeRef.current) {
+        html5QrCodeRef.current.stop().catch(err => console.error('Cleanup error:', err));
+      }
+    };
+  }, []);
 
   return (
     <div className="page-container">
@@ -85,24 +176,80 @@ const VerifyTickets = () => {
       <div className="verify-container">
         <form onSubmit={verifyTicket} className="verify-form">
           <div className="form-group">
-            <label>Enter Token ID</label>
+            <label>Enter Token ID or Scan QR Code</label>
             <input
               type="number"
               value={tokenId}
               onChange={(e) => setTokenId(e.target.value)}
               placeholder="e.g., 1"
               required
+              disabled={isScanning}
             />
           </div>
-          
-          <button
-            type="submit"
-            className="verify-btn"
-            disabled={isLoading}
-          >
-            {isLoading ? 'Verifying...' : 'Verify Ticket'}
-          </button>
+
+          <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
+            <button
+              type="submit"
+              className="verify-btn"
+              disabled={isLoading || isScanning}
+              style={{
+                background: isLoading || isScanning ? '#6b7280' : '#22c55e',
+                cursor: isLoading || isScanning ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {isLoading ? 'Verifying...' : 'Verify Ticket'}
+            </button>
+
+            <button
+              type="button"
+              onClick={isScanning ? stopQRScanner : startQRScanner}
+              className="scan-btn"
+              disabled={isLoading}
+              style={{
+                background: isScanning ? '#ef4444' : '#6366f1',
+                color: 'white',
+                padding: '12px',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: 'bold'
+              }}
+            >
+              {isScanning ? '📷 Stop Scanning' : '📷 Scan QR Code'}
+            </button>
+          </div>
         </form>
+
+        {/* QR Scanner Container */}
+        {isScanning && (
+          <div style={{
+            marginTop: '20px',
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '20px',
+            borderRadius: '8px',
+            textAlign: 'center'
+          }}>
+            <div id="qr-reader" style={{ width: '100%' }}></div>
+            <p style={{ marginTop: '15px', color: '#94a3b8' }}>
+              Point your camera at the QR code on the ticket
+            </p>
+          </div>
+        )}
+
+        {/* Scan Error */}
+        {scanError && (
+          <div style={{
+            marginTop: '15px',
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            padding: '15px',
+            borderRadius: '6px',
+            color: '#ef4444'
+          }}>
+            {scanError}
+          </div>
+        )}
 
         {verificationResult && (
           <div className="verification-result">

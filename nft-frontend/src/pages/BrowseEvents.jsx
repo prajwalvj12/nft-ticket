@@ -4,6 +4,8 @@ import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
 import contractAddress from '../EventTicketNFT-address.js';
 import contractABI from '../EventTicketNFT-abi.json';
+import { generateTicketQRCode } from '../utils/qrcode.js';
+import { uploadMetadataToIPFS, createTicketMetadata, isPinataConfigured, getIPFSGatewayURL } from '../utils/ipfs.js';
 import '../styles/Pages.css';
 
 const CONTRACT_ADDRESS = contractAddress;
@@ -91,10 +93,10 @@ export default function BrowseEvents() {
 
     setPurchasingEvent(eventId);
     setError(null);
-    
+
     try {
       console.log(`🎫 Starting purchase for Event ${eventId}, Price: ${price} MATIC`);
-      
+
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
@@ -102,41 +104,91 @@ export default function BrowseEvents() {
       // Check wallet balance
       const balance = await provider.getBalance(address);
       const balanceInMatic = ethers.formatEther(balance);
-      
+
       if (parseFloat(balanceInMatic) < (parseFloat(price) + 0.01)) {
         alert(`❌ Insufficient MATIC balance.\n\nYou need: ${price} MATIC + gas fees\nYou have: ${parseFloat(balanceInMatic).toFixed(4)} MATIC\n\nGet test MATIC from Polygon faucet.`);
         return;
       }
 
-      // Simple tokenURI (no complex metadata)
-      const simpleTokenURI = `https://api.eventtickets.app/ticket/${eventId}-${Date.now()}`;
-      
       console.log('💰 Wallet balance check passed');
-      console.log('🔗 Token URI:', simpleTokenURI);
+
+      // Get event details for metadata
+      const event = events.find(e => e.id === eventId);
+      const tempTokenId = Date.now(); // Temporary ID for metadata creation
+
+      let tokenURI = '';
+      let qrCodeDataURL = '';
+
+      // Check if IPFS is configured
+      if (isPinataConfigured()) {
+        console.log('📦 IPFS configured, generating QR code and uploading metadata...');
+
+        // Generate QR code for the ticket
+        try {
+          qrCodeDataURL = await generateTicketQRCode({
+            tokenId: tempTokenId,
+            eventId: eventId,
+            owner: address
+          });
+          console.log('✅ QR code generated');
+        } catch (qrError) {
+          console.warn('⚠️ QR code generation failed, continuing without QR:', qrError);
+        }
+
+        // Create metadata
+        const metadata = createTicketMetadata({
+          tokenId: tempTokenId,
+          eventId: eventId,
+          eventName: event?.name || 'Event',
+          eventDate: event?.eventDate || 'TBA',
+          seatNumber: event?.soldTickets + 1 || 1,
+          price: price,
+          owner: address,
+          qrCodeDataURL: qrCodeDataURL
+        });
+
+        console.log('📝 Metadata created:', metadata);
+
+        // Upload to IPFS
+        try {
+          const ipfsHash = await uploadMetadataToIPFS(metadata);
+          tokenURI = `ipfs://${ipfsHash}`;
+          console.log('✅ Metadata uploaded to IPFS:', tokenURI);
+          console.log('🌐 View at:', getIPFSGatewayURL(ipfsHash));
+        } catch (ipfsError) {
+          console.warn('⚠️ IPFS upload failed, using fallback URI:', ipfsError);
+          tokenURI = `https://api.eventtickets.app/ticket/${eventId}-${Date.now()}`;
+        }
+      } else {
+        console.log('ℹ️ IPFS not configured, using simple token URI');
+        tokenURI = `https://api.eventtickets.app/ticket/${eventId}-${Date.now()}`;
+      }
+
+      console.log('🔗 Token URI:', tokenURI);
 
       // Execute transaction with optimized settings
       const txParams = {
         value: ethers.parseEther(price.toString())
-       };
+      };
 
       console.log('⚡ Transaction parameters:', txParams);
 
-      const tx = await contract.mintTicket(eventId, simpleTokenURI, txParams);
+      const tx = await contract.mintTicket(eventId, tokenURI, txParams);
 
       console.log('📄 Transaction sent:', tx.hash);
-      
+
       // Show transaction sent confirmation
       alert(`✅ Transaction sent successfully!\n\nHash: ${tx.hash}\n\nWaiting for blockchain confirmation...`);
 
       const receipt = await tx.wait();
-      
+
       if (receipt.status === 1) {
         console.log('✅ Transaction confirmed:', receipt);
-        
+
         // Extract token ID from transaction logs
         let tokenId = 'Unknown';
         try {
-          const transferEvent = receipt.logs.find(log => 
+          const transferEvent = receipt.logs.find(log =>
             log.topics[0] === ethers.id("Transfer(address,address,uint256)")
           );
           if (transferEvent) {
@@ -145,9 +197,13 @@ export default function BrowseEvents() {
         } catch (e) {
           console.log('Could not extract token ID from logs');
         }
-        
-        alert(`🎉 Ticket purchased successfully!\n\n🎫 Token ID: ${tokenId}\n📄 Transaction: ${tx.hash}\n\n✅ Your NFT ticket has been created\n📱 Check your MetaMask wallet (NFTs section)\n\nNote: It may take a few minutes to appear in your wallet.`);
-        
+
+        const successMessage = isPinataConfigured()
+          ? `🎉 Ticket purchased successfully!\n\n🎫 Token ID: ${tokenId}\n📄 Transaction: ${tx.hash}\n📦 Metadata stored on IPFS\n\n✅ Your NFT ticket has been created with QR code\n📱 Check your MetaMask wallet (NFTs section)\n\nNote: It may take a few minutes to appear in your wallet.`
+          : `🎉 Ticket purchased successfully!\n\n🎫 Token ID: ${tokenId}\n📄 Transaction: ${tx.hash}\n\n✅ Your NFT ticket has been created\n📱 Check your MetaMask wallet (NFTs section)\n\nNote: It may take a few minutes to appear in your wallet.`;
+
+        alert(successMessage);
+
         // Refresh events to update sold tickets count
         fetchEvents();
       } else {
