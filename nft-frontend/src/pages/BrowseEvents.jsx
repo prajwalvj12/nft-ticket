@@ -2,43 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
+import contractAddress from '../EventTicketNFT-address.js';
+import contractABI from '../EventTicketNFT-abi.json';
 import '../styles/Pages.css';
 
-const CONTRACT_ADDRESS = "0x19128bD3C0c9152E2ef74be4472A7A29A15836Ef";
-
-const CONTRACT_ABI = [
-  {
-    "inputs": [{"internalType": "uint256", "name": "_eventId", "type": "uint256"}],
-    "name": "getEventDetails",
-    "outputs": [{
-      "components": [
-        {"internalType": "uint256", "name": "eventId", "type": "uint256"},
-        {"internalType": "string", "name": "name", "type": "string"},
-        {"internalType": "uint256", "name": "price", "type": "uint256"},
-        {"internalType": "uint256", "name": "maxTickets", "type": "uint256"},
-        {"internalType": "uint256", "name": "soldTickets", "type": "uint256"},
-        {"internalType": "uint256", "name": "eventDate", "type": "uint256"},
-        {"internalType": "bool", "name": "isActive", "type": "bool"},
-        {"internalType": "address", "name": "organizer", "type": "address"}
-      ],
-      "internalType": "struct EventTicketNFT.Event",
-      "name": "",
-      "type": "tuple"
-    }],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {"internalType": "uint256", "name": "_eventId", "type": "uint256"},
-      {"internalType": "string", "name": "_tokenURI", "type": "string"}
-    ],
-    "name": "mintTicket",
-    "outputs": [],
-    "stateMutability": "payable",
-    "type": "function"
-  }
-];
+const CONTRACT_ADDRESS = contractAddress;
+const CONTRACT_ABI = contractABI;
 
 export default function BrowseEvents() {
   const { address, isConnected } = useAccount();
@@ -59,7 +28,8 @@ export default function BrowseEvents() {
     
     try {
       console.log('📡 Fetching events from blockchain...');
-      const provider = new ethers.JsonRpcProvider('https://rpc-amoy.polygon.technology');
+      console.log('📄 Contract address:', CONTRACT_ADDRESS);
+      const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
       
       const eventsData = [];
@@ -67,9 +37,14 @@ export default function BrowseEvents() {
       // Check events 1-50
       for (let eventId = 1; eventId <= 50; eventId++) {
         try {
+          console.log(`🔍 Checking event ID ${eventId}...`);
           const eventDetails = await contract.getEventDetails(eventId);
+          console.log(`Event ${eventId} details:`, eventDetails);
+          console.log(`Event ${eventId} name:`, eventDetails.name);
+          console.log(`Event ${eventId} name length:`, eventDetails.name?.length);
           
           if (eventDetails.name && eventDetails.name.length > 0) {
+            console.log(`✅ Event ${eventId} has valid name, adding to list`);
             eventsData.push({
               id: eventId,
               name: eventDetails.name,
@@ -81,8 +56,11 @@ export default function BrowseEvents() {
               organizer: eventDetails.organizer
             });
             console.log(`✅ Found event: ${eventDetails.name}`);
+          } else {
+            console.log(`❌ Event ${eventId} has empty name, skipping`);
           }
         } catch (error) {
+          console.log(`❌ Error fetching event ${eventId}:`, error.message);
           // Event doesn't exist, continue
           continue;
         }

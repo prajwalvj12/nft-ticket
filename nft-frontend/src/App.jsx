@@ -12,18 +12,19 @@ import { AuthProvider } from './context/AuthContext';
 
 import LandingPage from "./components/LandingPage";
 import Login from "./pages/Login";
-import Signup from "./pages/Signup";
 import Home from "./pages/Home";
 import MintTickets from "./pages/MintTickets";
 import BrowseEvents from "./pages/BrowseEvents";
 import VerifyTickets from "./pages/VerifyTickets";
+import Admin from "./pages/Admin";
+import Marketplace from "./pages/Marketplace";
 import "./App.css";
 import "./styles/Auth.css";
 import "./styles/Pages.css";
 
 const config = getDefaultConfig({
   appName: "SecureTickets",
-  projectId: "e3b38f2f396e5fccc8caf599813ab14a",
+  projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID,
   chains: [polygonAmoy],
   ssr: false,
 });
@@ -40,11 +41,12 @@ function App() {
               <Routes>
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<Signup />} />
                 <Route path="/home" element={<Home />} />
                 <Route path="/mint-tickets" element={<MintTickets />} />
                 <Route path="/browse-events" element={<BrowseEvents />} />
                 <Route path="/verify-tickets" element={<VerifyTickets />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="/marketplace" element={<Marketplace />} />
               </Routes>
             </Router>
           </AuthProvider>

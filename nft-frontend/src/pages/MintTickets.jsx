@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
+import contractAddress from '../EventTicketNFT-address.js';
 import '../styles/Pages.css';
 
-const CONTRACT_ADDRESS = "0x19128bD3C0c9152E2ef74be4472A7A29A15836Ef";
+const CONTRACT_ADDRESS = contractAddress;
 
 // Correct ABI matching your contract
 const CONTRACT_ABI = [

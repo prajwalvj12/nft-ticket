@@ -1,13 +1,50 @@
-# Sample Hardhat Project
+# nft_ticket
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
+A simple NFT ticket app that allows you to create, view, and transfer tickets as NFTs.
 
-Try running some of the following tasks:
+## Getting Started
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
+### Prerequisites
+
+- Node.js
+- npm
+
+### Backend
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Run a local Hardhat node:
+
+```bash
 npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.js
+```
+
+3. In a new terminal, deploy the smart contracts to the local node:
+
+```bash
+npx hardhat ignition deploy ./ignition/modules/EventTicketNFT.js --network localhost
+```
+
+### Frontend
+
+1. Navigate to the `nft-frontend` directory:
+
+```bash
+cd nft-frontend
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Start the development server:
+
+```bash
+npm run dev
 ```

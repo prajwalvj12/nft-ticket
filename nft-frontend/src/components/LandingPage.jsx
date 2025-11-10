@@ -62,9 +62,9 @@ const LandingPage = () => {
           <Link to="/home" className="primary-btn">
             Book Your Shows
           </Link>
-          <a href="#list-ticket" className="secondary-btn">
-            List Your Ticket →
-          </a>
+          <Link to="/marketplace" className="secondary-btn">
+            Marketplace
+          </Link>
           <Link to="/home" className="gradient-btn">
             Host Your Event
           </Link>
