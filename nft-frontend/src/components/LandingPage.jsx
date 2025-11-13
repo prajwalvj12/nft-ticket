@@ -44,10 +44,6 @@ const LandingPage = () => {
 
       {/* Hero Section */}
       <main className="hero-section">
-        <div className="hero-badge">
-          The Future of Event Ticketing
-        </div>
-        
         <h1 className="hero-title">
           Secure Tickets. Zero Black Market. True Ownership.
         </h1>

@@ -338,7 +338,7 @@ const Marketplace = () => {
       console.log('🎫 Creating marketplace listing...');
       console.log('   Token ID:', selectedTicket.tokenId);
       console.log('   Price:', price, 'MATIC');
-      console.log('   Marketplace:', marketplaceAddress);
+      console.log('   Marketplace:', MARKETPLACE_ADDRESS);
       console.log('   NFT Contract:', contractAddress);
 
       const provider = new ethers.BrowserProvider(window.ethereum);

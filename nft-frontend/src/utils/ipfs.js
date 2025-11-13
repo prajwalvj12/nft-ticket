@@ -11,6 +11,18 @@ const PINATA_JWT = import.meta.env.VITE_PINATA_JWT;
  */
 export async function uploadMetadataToIPFS(metadata) {
   try {
+    console.log('[IPFS Upload] Starting upload to Pinata...');
+    console.log('[IPFS Upload] Metadata to upload:', JSON.stringify(metadata, null, 2).substring(0, 500) + '...');
+    console.log('[IPFS Upload] Has image:', !!metadata.image);
+    console.log('[IPFS Upload] Image is QR code:', metadata.image?.startsWith('data:image/png;base64,'));
+
+    // Check credentials
+    if (!PINATA_JWT && (!PINATA_API_KEY || !PINATA_SECRET_KEY)) {
+      throw new Error('Pinata credentials not configured in .env file');
+    }
+
+    console.log('[IPFS Upload] Using authentication:', PINATA_JWT ? 'JWT' : 'API Key/Secret');
+
     // Use JWT if available, otherwise fall back to API key/secret
     const headers = PINATA_JWT
       ? {
@@ -30,16 +42,34 @@ export async function uploadMetadataToIPFS(metadata) {
       }
     });
 
+    console.log('[IPFS Upload] Request payload size:', data.length, 'bytes');
+    console.log('[IPFS Upload] Sending request to Pinata...');
+
     const response = await axios.post(
       'https://api.pinata.cloud/pinning/pinJSONToIPFS',
       data,
       { headers }
     );
 
-    console.log('✅ Metadata uploaded to IPFS:', response.data);
+    console.log('[IPFS Upload] ✅ Upload successful!');
+    console.log('[IPFS Upload] Response:', response.data);
+    console.log('[IPFS Upload] IPFS Hash:', response.data.IpfsHash);
+    console.log('[IPFS Upload] Timestamp:', response.data.Timestamp);
+
     return response.data.IpfsHash;
   } catch (error) {
-    console.error('❌ Error uploading to IPFS:', error);
+    console.error('[IPFS Upload] ❌ Upload failed!');
+    console.error('[IPFS Upload] Error:', error.message);
+
+    if (error.response) {
+      console.error('[IPFS Upload] Response status:', error.response.status);
+      console.error('[IPFS Upload] Response data:', error.response.data);
+    } else if (error.request) {
+      console.error('[IPFS Upload] No response received from Pinata');
+    } else {
+      console.error('[IPFS Upload] Error details:', error);
+    }
+
     throw new Error('Failed to upload metadata to IPFS: ' + error.message);
   }
 }

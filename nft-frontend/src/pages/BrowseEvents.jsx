@@ -18,10 +18,34 @@ export default function BrowseEvents() {
   const [isLoading, setIsLoading] = useState(true);
   const [purchasingEvent, setPurchasingEvent] = useState(null);
   const [error, setError] = useState(null);
+  const [testQRCode, setTestQRCode] = useState(null);
 
   useEffect(() => {
     fetchEvents();
   }, []);
+
+  // Test QR code generation
+  const testQRGeneration = async () => {
+    try {
+      console.log('=== Testing QR Code Generation ===');
+      const testData = {
+        tokenId: 'E1',
+        eventId: 1,
+        owner: address || '0x1234567890123456789012345678901234567890'
+      };
+
+      console.log('Test data:', testData);
+      const qrCode = await generateTicketQRCode(testData);
+      console.log('✅ QR code generated successfully!');
+      console.log('QR code length:', qrCode.length);
+
+      setTestQRCode(qrCode);
+      alert('✅ QR Code test successful!\n\nCheck the console (F12) for details.\nA test QR code will be displayed below the events.');
+    } catch (error) {
+      console.error('❌ QR code test failed:', error);
+      alert(`❌ QR Code test failed!\n\nError: ${error.message}\n\nCheck console (F12) for details.`);
+    }
+  };
 
   // Fetch events from blockchain
   const fetchEvents = async () => {
@@ -125,31 +149,46 @@ export default function BrowseEvents() {
         // Check if IPFS is configured
         if (isPinataConfigured()) {
           console.log('📦 IPFS configured, attempting to generate QR code and upload metadata...');
+          console.log('🎫 Event ID:', eventId);
+          console.log('👤 Owner:', address);
 
           let qrCodeDataURL = '';
 
           // Generate QR code with event info (we'll update with token ID later if needed)
           try {
+            console.log('🎨 Starting QR code generation...');
             // Use a simple QR format with just event ID and owner
             // This way it can still be used for verification
-            const qrPromise = generateTicketQRCode({
+            const qrData = {
               tokenId: `E${eventId}`, // Use event ID prefix temporarily
               eventId: eventId,
               owner: address
-            });
+            };
+            console.log('QR Data:', qrData);
 
-            // Timeout after 5 seconds
+            const qrPromise = generateTicketQRCode(qrData);
+
+            // Timeout after 10 seconds (increased from 5)
             qrCodeDataURL = await Promise.race([
               qrPromise,
-              new Promise((_, reject) => setTimeout(() => reject(new Error('QR generation timeout')), 5000))
+              new Promise((_, reject) => setTimeout(() => reject(new Error('QR generation timeout')), 10000))
             ]);
 
-            console.log('✅ QR code generated with event info');
+            console.log('✅ QR code generated successfully!');
+            console.log('QR code length:', qrCodeDataURL?.length || 0);
+            console.log('QR code preview (first 50 chars):', qrCodeDataURL?.substring(0, 50));
+
+            if (!qrCodeDataURL || !qrCodeDataURL.startsWith('data:image')) {
+              throw new Error('Invalid QR code format - not a data URL');
+            }
           } catch (qrError) {
-            console.warn('⚠️ QR code generation failed, continuing without QR:', qrError.message);
+            console.error('❌ QR code generation failed:', qrError);
+            console.error('Error details:', qrError.message);
+            console.error('QR code will NOT be included in metadata');
           }
 
           // Create metadata
+          console.log('📝 Creating metadata...');
           const metadata = createTicketMetadata({
             tokenId: `Event ${eventId} Ticket`, // Descriptive name instead of ID
             eventId: eventId,
@@ -161,27 +200,48 @@ export default function BrowseEvents() {
             qrCodeDataURL: qrCodeDataURL
           });
 
-          console.log('📝 Metadata created:', metadata);
+          console.log('✅ Metadata created successfully!');
+          console.log('Metadata name:', metadata.name);
+          console.log('Metadata description:', metadata.description);
+          console.log('Has QR image:', metadata.image ? 'YES' : 'NO');
+          console.log('Image type:', metadata.image?.startsWith('data:image') ? 'Base64 QR Code' : 'Placeholder URL');
+          console.log('Attributes count:', metadata.attributes?.length || 0);
+
+          // Check if we have a valid QR code in metadata
+          if (!qrCodeDataURL || !metadata.image?.startsWith('data:image')) {
+            console.warn('⚠️ WARNING: Metadata does not contain QR code!');
+            console.warn('Proceeding with placeholder image instead');
+          }
 
           // Upload to IPFS (with timeout)
           try {
+            console.log('📤 Uploading metadata to IPFS via Pinata...');
             const uploadPromise = uploadMetadataToIPFS(metadata);
 
-            // Timeout after 10 seconds
+            // Timeout after 20 seconds (increased from 10)
             const ipfsHash = await Promise.race([
               uploadPromise,
-              new Promise((_, reject) => setTimeout(() => reject(new Error('IPFS upload timeout')), 10000))
+              new Promise((_, reject) => setTimeout(() => reject(new Error('IPFS upload timeout after 20s')), 20000))
             ]);
 
             tokenURI = `ipfs://${ipfsHash}`;
-            console.log('✅ Metadata uploaded to IPFS:', tokenURI);
+            console.log('✅ Metadata uploaded to IPFS successfully!');
+            console.log('IPFS Hash:', ipfsHash);
+            console.log('Token URI:', tokenURI);
             console.log('🌐 View at:', getIPFSGatewayURL(ipfsHash));
+
+            alert(`✅ Metadata uploaded to IPFS!\n\nIPFS Hash: ${ipfsHash}\n\nQR Code: ${qrCodeDataURL ? 'Included ✅' : 'Not included ❌'}\n\nContinuing with transaction...`);
           } catch (ipfsError) {
-            console.warn('⚠️ IPFS upload failed, using fallback URI:', ipfsError.message);
+            console.error('❌ IPFS upload failed!');
+            console.error('Error:', ipfsError.message);
+            console.error('Using fallback URI instead');
+            alert(`⚠️ IPFS Upload Failed!\n\nError: ${ipfsError.message}\n\nWill use fallback URI (no QR code)\n\nContinuing with transaction...`);
             // tokenURI already set to fallback
           }
         } else {
           console.log('ℹ️ IPFS not configured, using simple token URI');
+          console.log('❌ QR code will NOT be saved to blockchain');
+          alert('⚠️ IPFS not configured!\n\nTicket will be created without QR code in metadata.\n\nPlease configure VITE_PINATA_JWT in .env file.');
         }
       } catch (overallError) {
         console.error('⚠️ IPFS integration error, using fallback URI:', overallError.message);
@@ -351,13 +411,13 @@ export default function BrowseEvents() {
       </div>
 
       {/* Wallet Status */}
-      <div style={{ 
-        background: isConnected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+      <div style={{
+        background: isConnected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
         border: isConnected ? '1px solid rgba(34, 197, 94, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
-        padding: '15px', 
-        borderRadius: '8px', 
+        padding: '15px',
+        borderRadius: '8px',
         marginBottom: '20px',
-        textAlign: 'center' 
+        textAlign: 'center'
       }}>
         <p>
           <strong>Wallet Status:</strong> {isConnected ? '✅ Connected' : '❌ Not Connected'}
@@ -369,6 +429,54 @@ export default function BrowseEvents() {
           <p style={{ color: '#dc2626', fontSize: '14px', marginTop: '8px' }}>
             Connect your wallet to purchase tickets
           </p>
+        )}
+      </div>
+
+      {/* QR Test Tool */}
+      <div style={{
+        background: 'rgba(99, 102, 241, 0.1)',
+        border: '1px solid rgba(99, 102, 241, 0.3)',
+        padding: '15px',
+        borderRadius: '8px',
+        marginBottom: '20px'
+      }}>
+        <h3 style={{ color: '#818cf8', fontSize: '16px', marginBottom: '10px' }}>🔧 Debug Tool: Test QR Code Generation</h3>
+        <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '10px' }}>
+          Click below to test if QR code generation is working properly. Check console (F12) for detailed logs.
+        </p>
+        <button
+          onClick={testQRGeneration}
+          style={{
+            background: '#6366f1',
+            color: 'white',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold'
+          }}
+        >
+          🧪 Test QR Generation
+        </button>
+
+        {testQRCode && (
+          <div style={{ marginTop: '15px' }}>
+            <p style={{ color: '#22c55e', fontSize: '13px', marginBottom: '10px' }}>
+              ✅ Test QR Code Generated Successfully!
+            </p>
+            <div style={{
+              background: 'white',
+              padding: '15px',
+              borderRadius: '8px',
+              display: 'inline-block'
+            }}>
+              <img src={testQRCode} alt="Test QR Code" style={{ width: '200px', height: '200px' }} />
+            </div>
+            <p style={{ color: '#94a3b8', fontSize: '12px', marginTop: '10px' }}>
+              If you can see this QR code, generation is working! The issue might be with IPFS upload.
+            </p>
+          </div>
         )}
       </div>
 

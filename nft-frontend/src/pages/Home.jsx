@@ -8,15 +8,27 @@ const Home = () => {
 
   return (
     <div className="home-container">
+      <div style={{
+        width: '100%',
+        maxWidth: '1200px',
+        display: 'flex',
+        justifyContent: 'flex-start',
+        marginBottom: '20px'
+      }}>
+        <Link to="/" className="back-btn" style={{ position: 'static', display: 'inline-block' }}>
+          ← Back to Landing
+        </Link>
+      </div>
+
       <div className="home-header">
         <h1>Welcome to SecureTickets, {user?.name || 'User'}!</h1>
         <p>Connect your wallet and start exploring events</p>
       </div>
-      
+
       <div className="wallet-section">
         <ConnectButton />
       </div>
-      
+
       <div className="features-section">
         <h2>What would you like to do?</h2>
         <div className="feature-cards">

@@ -7,7 +7,14 @@ import QRCode from 'qrcode';
  */
 export async function generateTicketQRCode(ticketData) {
   try {
+    console.log('[QR Generator] Starting QR code generation...');
+    console.log('[QR Generator] Input data:', ticketData);
+
     const { tokenId, eventId, owner } = ticketData;
+
+    if (!tokenId || !eventId || !owner) {
+      throw new Error(`Missing required fields: tokenId=${tokenId}, eventId=${eventId}, owner=${owner}`);
+    }
 
     // Create a verification URL or data string
     const qrData = JSON.stringify({
@@ -18,7 +25,11 @@ export async function generateTicketQRCode(ticketData) {
       verifyUrl: `https://securetickets.app/verify/${tokenId}`
     });
 
+    console.log('[QR Generator] QR data string:', qrData);
+    console.log('[QR Generator] QR data length:', qrData.length);
+
     // Generate QR code as data URL
+    console.log('[QR Generator] Calling QRCode.toDataURL...');
     const qrCodeDataURL = await QRCode.toDataURL(qrData, {
       errorCorrectionLevel: 'H',
       type: 'image/png',
@@ -31,9 +42,18 @@ export async function generateTicketQRCode(ticketData) {
       width: 400
     });
 
+    console.log('[QR Generator] ✅ QR code generated successfully!');
+    console.log('[QR Generator] Data URL length:', qrCodeDataURL.length);
+    console.log('[QR Generator] Data URL preview:', qrCodeDataURL.substring(0, 50));
+
+    if (!qrCodeDataURL.startsWith('data:image/png;base64,')) {
+      throw new Error('QR code generation returned invalid format');
+    }
+
     return qrCodeDataURL;
   } catch (error) {
-    console.error('Error generating QR code:', error);
+    console.error('[QR Generator] ❌ Error generating QR code:', error);
+    console.error('[QR Generator] Error stack:', error.stack);
     throw new Error('Failed to generate QR code: ' + error.message);
   }
 }
