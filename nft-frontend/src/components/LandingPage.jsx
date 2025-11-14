@@ -30,14 +30,11 @@ const LandingPage = () => {
           {user ? (
             <div className="user-menu">
               <span className="user-name">Hello, {user.name}</span>
-              <Link to="/home" className="home-btn">Dashboard</Link>
+              <Link to="/dashboard" className="home-btn">Dashboard</Link>
               <button onClick={handleLogout} className="logout-btn">Logout</button>
             </div>
           ) : (
-            <>
-              <Link to="/login" className="login-btn">Login</Link>
-              <Link to="/signup" className="signup-btn">Sign Up</Link>
-            </>
+            <Link to="/login" className="signup-btn">Login</Link>
           )}
         </div>
       </header>
@@ -55,14 +52,17 @@ const LandingPage = () => {
         </p>
         
         <div className="hero-buttons">
-          <Link to="/home" className="primary-btn">
+          <Link to="/browse-events" className="gradient-btn">
             Book Your Shows
           </Link>
-          <Link to="/marketplace" className="secondary-btn">
+          <Link to="/marketplace" className="gradient-btn">
             Marketplace
           </Link>
-          <Link to="/home" className="gradient-btn">
+          <Link to="/mint-tickets" className="gradient-btn">
             Host Your Event
+          </Link>
+          <Link to="/verify-tickets" className="gradient-btn">
+            Verify Ticket
           </Link>
         </div>
         

@@ -526,14 +526,6 @@ const VerifyTickets = () => {
           <p style={{ marginTop: '10px', fontSize: '13px', color: '#94a3b8' }}>
             💡 <strong>Can't see QR?</strong> Use "Find My Tickets" button below to view and download your QR code!
           </p>
-          <hr style={{ margin: '15px 0', border: 'none', borderTop: '1px solid rgba(99, 102, 241, 0.2)' }} />
-          <strong>🦁 For Brave Browser Camera:</strong>
-          <ol style={{ marginTop: '10px', marginLeft: '20px', fontSize: '13px', lineHeight: '1.5' }}>
-            <li>Click the <strong>shield icon (🦁)</strong> in the address bar</li>
-            <li>Make sure <strong>Camera</strong> permission is ON</li>
-            <li>Click <strong>"Reset permission"</strong> if needed</li>
-            <li>Refresh page and try again</li>
-          </ol>
         </div>
 
         <form onSubmit={verifyTicket} className="verify-form">

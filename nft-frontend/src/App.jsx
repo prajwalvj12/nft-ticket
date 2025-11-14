@@ -13,14 +13,17 @@ import { AuthProvider } from './context/AuthContext';
 import LandingPage from "./components/LandingPage";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
+import Dashboard from "./pages/Dashboard";
 import MintTickets from "./pages/MintTickets";
 import BrowseEvents from "./pages/BrowseEvents";
 import VerifyTickets from "./pages/VerifyTickets";
 import Admin from "./pages/Admin";
 import Marketplace from "./pages/Marketplace";
+import ProtectedRoute from "./components/ProtectedRoute";
 import "./App.css";
 import "./styles/Auth.css";
 import "./styles/Pages.css";
+import "./styles/Dashboard.css";
 
 const config = getDefaultConfig({
   appName: "SecureTickets",
@@ -42,11 +45,12 @@ function App() {
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/home" element={<Home />} />
-                <Route path="/mint-tickets" element={<MintTickets />} />
-                <Route path="/browse-events" element={<BrowseEvents />} />
-                <Route path="/verify-tickets" element={<VerifyTickets />} />
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/marketplace" element={<Marketplace />} />
+                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/mint-tickets" element={<ProtectedRoute><MintTickets /></ProtectedRoute>} />
+                <Route path="/browse-events" element={<ProtectedRoute><BrowseEvents /></ProtectedRoute>} />
+                <Route path="/verify-tickets" element={<ProtectedRoute><VerifyTickets /></ProtectedRoute>} />
+                <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+                <Route path="/marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
               </Routes>
             </Router>
           </AuthProvider>
